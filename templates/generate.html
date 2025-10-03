@@ -1,0 +1,151 @@
+{% extends "base.html" %}
+
+{% block title %}Generate Keys - Secure File & Message Sharing{% endblock %}
+
+{% block content %}
+<section id="key-generation-section" class="bg-white rounded-lg shadow-md p-6">
+    <h2 class="text-2xl font-semibold text-gray-800 mb-4">1. Generate Keys</h2>
+    <p class="text-gray-600 mb-4">Generate a new RSA key pair. Download and securely store your private key.</p>
+    
+    <button id="generate-keys-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-6 rounded-lg transition duration-200 flex items-center gap-2">
+        <span>Generate Keys</span>
+        <svg id="generate-keys-spinner" class="hidden animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+    </button>
+    
+    <div id="key-download-buttons" class="hidden mt-4 flex flex-wrap gap-3">
+        <button id="download-private-key-btn" class="bg-red-600 hover:bg-red-700 text-white font-medium py-2 px-4 rounded-lg transition duration-200">
+            Download Private Key
+        </button>
+        <button id="download-public-key-btn" class="bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-lg transition duration-200">
+            Download Public Key
+        </button>
+    </div>
+    
+    <div id="key-generation-error" class="hidden mt-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg"></div>
+</section>
+
+<script>
+    // ============================================
+    // Utility Functions
+    // ============================================
+    
+    /**
+     * Display error message in specified container
+     * @param {string} containerId - ID of error container element
+     * @param {string} message - Error message to display
+     * @param {boolean} autoDismiss - Whether to auto-dismiss after 5 seconds
+     */
+    function showError(containerId, message, autoDismiss = true) {
+        const errorContainer = document.getElementById(containerId);
+        if (errorContainer) {
+            errorContainer.textContent = message;
+            errorContainer.classList.remove('hidden');
+            
+            if (autoDismiss) {
+                setTimeout(() => {
+                    errorContainer.classList.add('hidden');
+                }, 5000);
+            }
+        }
+    }
+    
+    /**
+     * Show loading spinner for a button
+     * @param {string} buttonId - ID of button element
+     * @param {string} spinnerId - ID of spinner element
+     * @param {boolean} loading - Whether to show or hide loading state
+     */
+    function setLoadingState(buttonId, spinnerId, loading) {
+        const button = document.getElementById(buttonId);
+        const spinner = document.getElementById(spinnerId);
+        
+        if (button && spinner) {
+            button.disabled = loading;
+            if (loading) {
+                spinner.classList.remove('hidden');
+                button.classList.add('opacity-75', 'cursor-not-allowed');
+            } else {
+                spinner.classList.add('hidden');
+                button.classList.remove('opacity-75', 'cursor-not-allowed');
+            }
+        }
+    }
+    
+    /**
+     * Trigger browser download for a file
+     * @param {Blob} blob - File data as Blob
+     * @param {string} filename - Name for downloaded file
+     */
+    function downloadFile(blob, filename) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+    
+    // ============================================
+    // Key Generation Functionality
+    // ============================================
+    
+    let generatedKeys = null; // Store keys for download
+    
+    document.getElementById('generate-keys-btn').addEventListener('click', async function() {
+        clearError('key-generation-error');
+        setLoadingState('generate-keys-btn', 'generate-keys-spinner', true);
+        
+        // Hide download buttons
+        document.getElementById('key-download-buttons').classList.add('hidden');
+        
+        try {
+            const response = await fetch('/generate-keys', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                }
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                // Decode base64 keys and store for download
+                generatedKeys = {
+                    privateKey: atob(data.data.private_key),
+                    publicKey: atob(data.data.public_key)
+                };
+                
+                // Show download buttons
+                document.getElementById('key-download-buttons').classList.remove('hidden');
+            } else {
+                showError('key-generation-error', data.error || 'Failed to generate keys', false);
+            }
+        } catch (error) {
+            showError('key-generation-error', 'Network error: Unable to generate keys', false);
+        } finally {
+            setLoadingState('generate-keys-btn', 'generate-keys-spinner', false);
+        }
+    });
+    
+    // Download Private Key
+    document.getElementById('download-private-key-btn').addEventListener('click', function() {
+        if (generatedKeys && generatedKeys.privateKey) {
+            const blob = new Blob([generatedKeys.privateKey], { type: 'application/x-pem-file' });
+            downloadFile(blob, 'private_key.pem');
+        }
+    });
+    
+    // Download Public Key
+    document.getElementById('download-public-key-btn').addEventListener('click', function() {
+        if (generatedKeys && generatedKeys.publicKey) {
+            const blob = new Blob([generatedKeys.publicKey], { type: 'application/x-pem-file' });
+            downloadFile(blob, 'public_key.pem');
+        }
+    });
+</script>
+{% endblock %}

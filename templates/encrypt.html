@@ -1,0 +1,351 @@
+{% extends "base.html" %}
+
+{% block title %}Encrypt Content - Secure File & Message Sharing{% endblock %}
+
+{% block content %}
+<section id="encryption-section" class="bg-white rounded-lg shadow-md p-6">
+    <h2 class="text-2xl font-semibold text-gray-800 mb-4">2. Encrypt Content</h2>
+    <p class="text-gray-600 mb-4">Encrypt a message or file using the recipient's public key.</p>
+    
+    <!-- Input Type Selection -->
+    <div class="mb-4">
+        <label class="block text-gray-700 font-medium mb-2">Select Input Type:</label>
+        <div class="flex flex-wrap gap-4">
+            <label class="flex items-center cursor-pointer">
+                <input type="radio" name="input-type" value="text" checked class="mr-2">
+                <span class="text-gray-700">Plain Text</span>
+            </label>
+            <label class="flex items-center cursor-pointer">
+                <input type="radio" name="input-type" value="txt-file" class="mr-2">
+                <span class="text-gray-700">Text File (.txt)</span>
+            </label>
+            <label class="flex items-center cursor-pointer">
+                <input type="radio" name="input-type" value="image-file" class="mr-2">
+                <span class="text-gray-700">Image File (.png, .jpg)</span>
+            </label>
+        </div>
+    </div>
+    
+    <!-- Text Input -->
+    <div id="text-input-container" class="mb-4">
+        <label for="plain-text-input" class="block text-gray-700 font-medium mb-2">Message:</label>
+        <textarea id="plain-text-input" rows="4" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Enter your message here..."></textarea>
+    </div>
+    
+    <!-- File Input -->
+    <div id="file-input-container" class="hidden mb-4">
+        <label for="file-input" class="block text-gray-700 font-medium mb-2">Select File:</label>
+        <input type="file" id="file-input" accept=".txt,.png,.jpg,.jpeg" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+    </div>
+    
+    <!-- Public Key Upload -->
+    <div class="mb-4">
+        <label for="recipient-public-key" class="block text-gray-700 font-medium mb-2">Recipient's Public Key:</label>
+        <input type="file" id="recipient-public-key" accept=".pem" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+    </div>
+    
+    <button id="encrypt-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-6 rounded-lg transition duration-200 flex items-center gap-2">
+        <span>Encrypt</span>
+        <svg id="encrypt-spinner" class="hidden animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+    </button>
+    
+    <div id="encrypted-download-container" class="hidden mt-4">
+        <button id="download-encrypted-btn" class="bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-lg transition duration-200">
+            Download Encrypted File
+        </button>
+    </div>
+    
+    <div id="encryption-error" class="hidden mt-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg"></div>
+</section>
+
+<script>
+    // ============================================ 
+    // Validation Constants
+    // ============================================ 
+    
+    const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB in bytes
+    const ALLOWED_TEXT_EXTENSIONS = ['.txt'];
+    const ALLOWED_IMAGE_EXTENSIONS = ['.png', '.jpg', '.jpeg'];
+    const ALLOWED_KEY_EXTENSIONS = ['.pem'];
+    
+    // ============================================ 
+    // Utility Functions
+    // ============================================ 
+    
+    /**
+     * Display error message in specified container
+     * @param {string} containerId - ID of error container element
+     * @param {string} message - Error message to display
+     * @param {boolean} autoDismiss - Whether to auto-dismiss after 5 seconds
+     */
+    function showError(containerId, message, autoDismiss = true) {
+        const errorContainer = document.getElementById(containerId);
+        if (errorContainer) {
+            errorContainer.textContent = message;
+            errorContainer.classList.remove('hidden');
+            
+            if (autoDismiss) {
+                setTimeout(() => {
+                    errorContainer.classList.add('hidden');
+                }, 5000);
+            }
+        }
+    }
+    
+    /**
+     * Clear error message from specified container
+     * @param {string} containerId - ID of error container element
+     */
+    function clearError(containerId) {
+        const errorContainer = document.getElementById(containerId);
+        if (errorContainer) {
+            errorContainer.classList.add('hidden');
+            errorContainer.textContent = '';
+        }
+    }
+    
+    /**
+     * Show loading spinner for a button
+     * @param {string} buttonId - ID of button element
+     * @param {string} spinnerId - ID of spinner element
+     * @param {boolean} loading - Whether to show or hide loading state
+     */
+    function setLoadingState(buttonId, spinnerId, loading) {
+        const button = document.getElementById(buttonId);
+        const spinner = document.getElementById(spinnerId);
+        
+        if (button && spinner) {
+            button.disabled = loading;
+            if (loading) {
+                spinner.classList.remove('hidden');
+                button.classList.add('opacity-75', 'cursor-not-allowed');
+            } else {
+                spinner.classList.add('hidden');
+                button.classList.remove('opacity-75', 'cursor-not-allowed');
+            }
+        }
+    }
+    
+    /**
+     * Trigger browser download for a file
+     * @param {Blob} blob - File data as Blob
+     * @param {string} filename - Name for downloaded file
+     */
+    function downloadFile(blob, filename) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    }
+    
+    // ============================================ 
+    // Validation Functions
+    // ============================================ 
+    
+    /**
+     * Validate file size
+     * @param {File} file - File to validate
+     * @returns {Object} - {valid: boolean, error: string}
+     */
+    function validateFileSize(file) {
+        if (!file) {
+            return { valid: false, error: 'No file selected' };
+        }
+        
+        if (file.size === 0) {
+            return { valid: false, error: 'File is empty' };
+        }
+        
+        if (file.size > MAX_FILE_SIZE) {
+            const maxSizeMB = MAX_FILE_SIZE / (1024 * 1024);
+            return { valid: false, error: `File size exceeds maximum allowed size of ${maxSizeMB}MB` };
+        }
+        
+        return { valid: true };
+    }
+    
+    /**
+     * Validate file extension
+     * @param {File} file - File to validate
+     * @param {Array} allowedExtensions - Array of allowed extensions (e.g., ['.txt', '.png'])
+     * @returns {Object} - {valid: boolean, error: string}
+     */
+    function validateFileExtension(file, allowedExtensions) {
+        if (!file) {
+            return { valid: false, error: 'No file selected' };
+        }
+        
+        const fileName = file.name.toLowerCase();
+        const hasValidExtension = allowedExtensions.some(ext => fileName.endsWith(ext));
+        
+        if (!hasValidExtension) {
+            const allowedList = allowedExtensions.join(', ');
+            return { valid: false, error: `Invalid file type. Only ${allowedList} files are allowed` };
+        }
+        
+        return { valid: true };
+    }
+    
+    /**
+     * Validate file completely (size and extension)
+     * @param {File} file - File to validate
+     * @param {Array} allowedExtensions - Array of allowed extensions
+     * @returns {Object} - {valid: boolean, error: string}
+     */
+    function validateFile(file, allowedExtensions) {
+        // Check file size
+        const sizeValidation = validateFileSize(file);
+        if (!sizeValidation.valid) {
+            return sizeValidation;
+        }
+        
+        // Check file extension
+        const extensionValidation = validateFileExtension(file, allowedExtensions);
+        if (!extensionValidation.valid) {
+            return extensionValidation;
+        }
+        
+        return { valid: true };
+    }
+    
+    // ============================================ 
+    // Encryption Functionality
+    // ============================================ 
+    
+    // Input type selection handler
+    const inputTypeRadios = document.querySelectorAll('input[name="input-type"]');
+    const textInputContainer = document.getElementById('text-input-container');
+    const fileInputContainer = document.getElementById('file-input-container');
+    const fileInput = document.getElementById('file-input');
+    
+    inputTypeRadios.forEach(radio => {
+        radio.addEventListener('change', function() {
+            const selectedType = this.value;
+            
+            if (selectedType === 'text') {
+                textInputContainer.classList.remove('hidden');
+                fileInputContainer.classList.add('hidden');
+                fileInput.value = ''; // Clear file input
+            } else {
+                textInputContainer.classList.add('hidden');
+                fileInputContainer.classList.remove('hidden');
+                
+                // Update file input accept attribute based on selection
+                if (selectedType === 'txt-file') {
+                    fileInput.accept = '.txt';
+                } else if (selectedType === 'image-file') {
+                    fileInput.accept = '.png,.jpg,.jpeg';
+                }
+            }
+        });
+    });
+    
+    let encryptedData = null; // Store encrypted data for download
+    
+    document.getElementById('encrypt-btn').addEventListener('click', async function() {
+        clearError('encryption-error');
+        
+        // Get selected input type
+        const selectedInputType = document.querySelector('input[name="input-type"]:checked').value;
+        
+        // Validate recipient's public key
+        const publicKeyFile = document.getElementById('recipient-public-key').files[0];
+        if (!publicKeyFile) {
+            showError('encryption-error', 'Please upload the recipient\'s public key', true);
+            return;
+        }
+        
+        // Validate public key file
+        const keyValidation = validateFile(publicKeyFile, ALLOWED_KEY_EXTENSIONS);
+        if (!keyValidation.valid) {
+            showError('encryption-error', keyValidation.error, true);
+            return;
+        }
+        
+        // Validate content based on input type
+        let contentFile = null;
+        if (selectedInputType === 'text') {
+            const textContent = document.getElementById('plain-text-input').value;
+            if (!textContent.trim()) {
+                showError('encryption-error', 'Please enter a message to encrypt', true);
+                return;
+            }
+        } else {
+            contentFile = document.getElementById('file-input').files[0];
+            if (!contentFile) {
+                showError('encryption-error', 'Please select a file to encrypt', true);
+                return;
+            }
+            
+            // Validate file based on selected type
+            let allowedExtensions;
+            if (selectedInputType === 'txt-file') {
+                allowedExtensions = ALLOWED_TEXT_EXTENSIONS;
+            } else if (selectedInputType === 'image-file') {
+                allowedExtensions = ALLOWED_IMAGE_EXTENSIONS;
+            }
+            
+            const fileValidation = validateFile(contentFile, allowedExtensions);
+            if (!fileValidation.valid) {
+                showError('encryption-error', fileValidation.error, true);
+                return;
+            }
+        }
+        
+        // All validations passed, proceed with encryption
+        setLoadingState('encrypt-btn', 'encrypt-spinner', true);
+        
+        // Hide download button
+        document.getElementById('encrypted-download-container').classList.add('hidden');
+        
+        try {
+            // Create FormData
+            const formData = new FormData();
+            formData.append('public_key', publicKeyFile);
+            
+            // Add content based on input type
+            if (selectedInputType === 'text') {
+                const textContent = document.getElementById('plain-text-input').value;
+                formData.append('text_content', textContent);
+            } else {
+                formData.append('file_content', contentFile);
+            }
+            
+            // Make request
+            const response = await fetch('/encrypt', {
+                method: 'POST',
+                body: formData
+            });
+            
+            if (response.ok) {
+                // Get encrypted data as blob
+                encryptedData = await response.blob();
+                
+                // Show download button
+                document.getElementById('encrypted-download-container').classList.remove('hidden');
+            } else {
+                const errorData = await response.json();
+                showError('encryption-error', errorData.error || 'Encryption failed', true);
+            }
+        } catch (error) {
+            showError('encryption-error', 'Network error: Unable to encrypt content', true);
+        } finally {
+            setLoadingState('encrypt-btn', 'encrypt-spinner', false);
+        }
+    });
+    
+    // Download Encrypted File
+    document.getElementById('download-encrypted-btn').addEventListener('click', function() {
+        if (encryptedData) {
+            downloadFile(encryptedData, 'encrypted_data.bin');
+        }
+    });
+</script>
+{% endblock %}

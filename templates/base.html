@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Secure File & Message Sharing{% endblock %}</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 flex flex-col min-h-full">
+    <nav class="bg-white shadow-md">
+        <div class="container mx-auto px-4">
+            <div class="flex justify-between items-center py-4">
+                <a href="{{ url_for('index') }}" class="text-xl font-bold text-gray-800">SecureShare</a>
+                <div class="flex items-center space-x-4">
+                    <a href="{{ url_for('generate_page') }}" class="text-gray-600 hover:text-gray-800">Generate Keys</a>
+                    <a href="{{ url_for('encrypt_page') }}" class="text-gray-600 hover:text-gray-800">Encrypt</a>
+                    <a href="{{ url_for('decrypt_page') }}" class="text-gray-600 hover:text-gray-800">Decrypt</a>
+                    <span class="text-gray-600">|</span>
+                    <span class="text-gray-600">Welcome, {{ current_user.username }}</span>
+                    <a href="{{ url_for('logout') }}" class="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded">Logout</a>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mx-auto px-4 py-8 max-w-4xl flex-grow">
+        {% block content %}{% endblock %}
+    </div>
+
+    <!-- Footer -->
+    <footer class="text-center py-4 text-gray-500 text-sm">
+        <p>⚠️ Keep your private key secure. Never share it with anyone.</p>
+    </footer>
+</body>
+</html>

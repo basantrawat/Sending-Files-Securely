@@ -1,0 +1,272 @@
+{% extends "base.html" %}
+
+{% block title %}Decrypt Content - Secure File & Message Sharing{% endblock %}
+
+{% block content %}
+<section id="decryption-section" class="bg-white rounded-lg shadow-md p-6">
+    <h2 class="text-2xl font-semibold text-gray-800 mb-4">3. Decrypt Content</h2>
+    <p class="text-gray-600 mb-4">Decrypt a file using your private key.</p>
+    
+    <!-- Encrypted File Upload -->
+    <div class="mb-4">
+        <label for="encrypted-file-input" class="block text-gray-700 font-medium mb-2">Encrypted File:</label>
+        <input type="file" id="encrypted-file-input" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+    </div>
+    
+    <!-- Private Key Upload -->
+    <div class="mb-4">
+        <label for="private-key-input" class="block text-gray-700 font-medium mb-2">Your Private Key:</label>
+        <input type="file" id="private-key-input" accept=".pem" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500">
+    </div>
+    
+    <button id="decrypt-btn" class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-2 px-6 rounded-lg transition duration-200 flex items-center gap-2">
+        <span>Decrypt</span>
+        <svg id="decrypt-spinner" class="hidden animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+    </button>
+    
+    <!-- Decrypted Text Display -->
+    <div id="decrypted-text-container" class="hidden mt-4">
+        <label class="block text-gray-700 font-medium mb-2">Decrypted Message:</label>
+        <div id="decrypted-text-display" class="w-full px-4 py-3 bg-gray-50 border border-gray-300 rounded-lg whitespace-pre-wrap"></div>
+    </div>
+    
+    <!-- Decrypted Image Display -->
+    <div id="decrypted-image-container" class="hidden mt-4">
+        <label class="block text-gray-700 font-medium mb-2">Decrypted Image:</label>
+        <img id="decrypted-image-display" class="max-w-full h-auto rounded-lg border border-gray-300" alt="Decrypted image">
+    </div>
+    
+    <div id="decryption-error" class="hidden mt-4 bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg"></div>
+</section>
+
+<script>
+    // ============================================
+    // Validation Constants
+    // ============================================
+    
+    const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB in bytes
+    const ALLOWED_KEY_EXTENSIONS = ['.pem'];
+    
+    // ============================================
+    // Utility Functions
+    // ============================================
+    
+    /**
+     * Display error message in specified container
+     * @param {string} containerId - ID of error container element
+     * @param {string} message - Error message to display
+     * @param {boolean} autoDismiss - Whether to auto-dismiss after 5 seconds
+     */
+    function showError(containerId, message, autoDismiss = true) {
+        const errorContainer = document.getElementById(containerId);
+        if (errorContainer) {
+            errorContainer.textContent = message;
+            errorContainer.classList.remove('hidden');
+            
+            if (autoDismiss) {
+                setTimeout(() => {
+                    errorContainer.classList.add('hidden');
+                }, 5000);
+            }
+        }
+    }
+    
+    /**
+     * Clear error message from specified container
+     * @param {string} containerId - ID of error container element
+     */
+    function clearError(containerId) {
+        const errorContainer = document.getElementById(containerId);
+        if (errorContainer) {
+            errorContainer.classList.add('hidden');
+            errorContainer.textContent = '';
+        }
+    }
+    
+    /**
+     * Show loading spinner for a button
+     * @param {string} buttonId - ID of button element
+     * @param {string} spinnerId - ID of spinner element
+     * @param {boolean} loading - Whether to show or hide loading state
+     */
+    function setLoadingState(buttonId, spinnerId, loading) {
+        const button = document.getElementById(buttonId);
+        const spinner = document.getElementById(spinnerId);
+        
+        if (button && spinner) {
+            button.disabled = loading;
+            if (loading) {
+                spinner.classList.remove('hidden');
+                button.classList.add('opacity-75', 'cursor-not-allowed');
+            } else {
+                spinner.classList.add('hidden');
+                button.classList.remove('opacity-75', 'cursor-not-allowed');
+            }
+        }
+    }
+    
+    // ============================================
+    // Validation Functions
+    // ============================================
+    
+    /**
+     * Validate file size
+     * @param {File} file - File to validate
+     * @returns {Object} - {valid: boolean, error: string}
+     */
+    function validateFileSize(file) {
+        if (!file) {
+            return { valid: false, error: 'No file selected' };
+        }
+        
+        if (file.size === 0) {
+            return { valid: false, error: 'File is empty' };
+        }
+        
+        if (file.size > MAX_FILE_SIZE) {
+            const maxSizeMB = MAX_FILE_SIZE / (1024 * 1024);
+            return { valid: false, error: `File size exceeds maximum allowed size of ${maxSizeMB}MB` };
+        }
+        
+        return { valid: true };
+    }
+    
+    /**
+     * Validate file extension
+     * @param {File} file - File to validate
+     * @param {Array} allowedExtensions - Array of allowed extensions (e.g., ['.txt', '.png'])
+     * @returns {Object} - {valid: boolean, error: string}
+     */
+    function validateFileExtension(file, allowedExtensions) {
+        if (!file) {
+            return { valid: false, error: 'No file selected' };
+        }
+        
+        const fileName = file.name.toLowerCase();
+        const hasValidExtension = allowedExtensions.some(ext => fileName.endsWith(ext));
+        
+        if (!hasValidExtension) {
+            const allowedList = allowedExtensions.join(', ');
+            return { valid: false, error: `Invalid file type. Only ${allowedList} files are allowed` };
+        }
+        
+        return { valid: true };
+    }
+    
+    /**
+     * Validate file completely (size and extension)
+     * @param {File} file - File to validate
+     * @param {Array} allowedExtensions - Array of allowed extensions
+     * @returns {Object} - {valid: boolean, error: string}
+     */
+    function validateFile(file, allowedExtensions) {
+        // Check file size
+        const sizeValidation = validateFileSize(file);
+        if (!sizeValidation.valid) {
+            return sizeValidation;
+        }
+        
+        // Check file extension
+        const extensionValidation = validateFileExtension(file, allowedExtensions);
+        if (!extensionValidation.valid) {
+            return extensionValidation;
+        }
+        
+        return { valid: true };
+    }
+    
+    // ============================================
+    // Decryption Functionality
+    // ============================================
+    
+    document.getElementById('decrypt-btn').addEventListener('click', async function() {
+        clearError('decryption-error');
+        
+        // Validate encrypted file
+        const encryptedFile = document.getElementById('encrypted-file-input').files[0];
+        if (!encryptedFile) {
+            showError('decryption-error', 'Please select an encrypted file', true);
+            return;
+        }
+        
+        // Validate encrypted file size
+        const encryptedFileValidation = validateFileSize(encryptedFile);
+        if (!encryptedFileValidation.valid) {
+            showError('decryption-error', encryptedFileValidation.error, true);
+            return;
+        }
+        
+        // Validate private key
+        const privateKeyFile = document.getElementById('private-key-input').files[0];
+        if (!privateKeyFile) {
+            showError('decryption-error', 'Please upload your private key', true);
+            return;
+        }
+        
+        // Validate private key file
+        const keyValidation = validateFile(privateKeyFile, ALLOWED_KEY_EXTENSIONS);
+        if (!keyValidation.valid) {
+            showError('decryption-error', keyValidation.error, true);
+            return;
+        }
+        
+        // All validations passed, proceed with decryption
+        setLoadingState('decrypt-btn', 'decrypt-spinner', true);
+        
+        // Hide previous results
+        document.getElementById('decrypted-text-container').classList.add('hidden');
+        document.getElementById('decrypted-image-container').classList.add('hidden');
+        
+        try {
+            // Create FormData
+            const formData = new FormData();
+            formData.append('encrypted_file', encryptedFile);
+            formData.append('private_key', privateKeyFile);
+            
+            // Make request
+            const response = await fetch('/decrypt', {
+                method: 'POST',
+                body: formData
+            });
+            
+            if (response.ok) {
+                const data = await response.json();
+                
+                if (data.success) {
+                    if (data.data.content_type === 'text') {
+                        // Text content
+                        document.getElementById('decrypted-text-display').textContent = data.data.content;
+                        document.getElementById('decrypted-text-container').classList.remove('hidden');
+                    } else if (data.data.content_type === 'image') {
+                        // Image content - decode base64 and display
+                        const imageData = atob(data.data.content);
+                        const imageBytes = new Uint8Array(imageData.length);
+                        for (let i = 0; i < imageData.length; i++) {
+                            imageBytes[i] = imageData.charCodeAt(i);
+                        }
+                        const blob = new Blob([imageBytes], { type: data.data.mime_type });
+                        const imageUrl = URL.createObjectURL(blob);
+                        const imageElement = document.getElementById('decrypted-image-display');
+                        imageElement.src = imageUrl;
+                        document.getElementById('decrypted-image-container').classList.remove('hidden');
+                    } else {
+                        showError('decryption-error', 'Unknown content type received', false);
+                    }
+                } else {
+                    showError('decryption-error', data.error || 'Decryption failed', false);
+                }
+            } else {
+                const errorData = await response.json();
+                showError('decryption-error', errorData.error || 'Decryption failed', false);
+            }
+        } catch (error) {
+            showError('decryption-error', 'Network error: Unable to decrypt content', false);
+        } finally {
+            setLoadingState('decrypt-btn', 'decrypt-spinner', false);
+        }
+    });
+</script>
+{% endblock %}

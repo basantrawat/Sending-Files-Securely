@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+
+{% block title %}Home - Secure File & Message Sharing{% endblock %}
+
+{% block content %}
+<div class="text-center">
+    <h1 class="text-4xl font-bold text-gray-800 mb-2">Welcome to SecureShare</h1>
+    <p class="text-gray-600 mb-8">Your secure platform for end-to-end encrypted file and message sharing.</p>
+    <div class="space-x-4">
+        <a href="{{ url_for('generate_page') }}" class="bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-6 rounded-lg transition duration-200">Generate Keys</a>
+        <a href="{{ url_for('encrypt_page') }}" class="bg-green-600 hover:bg-green-700 text-white font-medium py-3 px-6 rounded-lg transition duration-200">Encrypt Content</a>
+        <a href="{{ url_for('decrypt_page') }}" class="bg-purple-600 hover:bg-purple-700 text-white font-medium py-3 px-6 rounded-lg transition duration-200">Decrypt Content</a>
+    </div>
+</div>
+{% endblock %}
